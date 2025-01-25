@@ -335,19 +335,21 @@ void IEC62056Component::loop() {
             break;
           }
 
-          std::string obis;
-          std::string val1;
-          std::string val2;
-
-          if (!parse_line_((const char *) in_buf_, obis, val1, val2)) {
+          std::vector<std::tuple<std::string, std::string, std::string>> parsed_values;
+          if (!parse_line2_((const char *) in_buf_, parsed_values)) {
             ESP_LOGE(TAG, "Invalid frame format: '%s'", in_buf_);
             break;
           }
 
-          // Update all matching sensors
-          auto range = sensors_.equal_range(obis);
-          for (auto it = range.first; it != range.second; ++it) {
-            set_sensor_value_(it, val1.c_str(), val2.c_str());
+          for (const auto &tuple : parsed_values) {
+            std::string obis = std::get<0>(tuple);
+            std::string val1 = std::get<1>(tuple);
+            std::string val2 = std::get<2>(tuple);
+            // Update all matching sensors
+            auto range = sensors_.equal_range(obis);
+            for (auto it = range.first; it != range.second; ++it) {
+              set_sensor_value_(it, val1.c_str(), val2.c_str());
+            }
           }
         }
       }
@@ -527,24 +529,27 @@ void IEC62056Component::loop() {
 
           in_buf_[frame_size - 2] = 0;
           ESP_LOGD(TAG, "Data: %s", in_buf_);
-          std::string obis;
-          std::string val1;
-          std::string val2;
 
           if ('!' == in_buf_[0]) {
             ESP_LOGV(TAG, "Detected end of readout record");
             break;
           }
 
-          if (!parse_line_((const char *) in_buf_, obis, val1, val2)) {
+          std::vector<std::tuple<std::string, std::string, std::string>> parsed_values;
+          if (!parse_line2_((const char *) in_buf_, parsed_values)) {
             ESP_LOGE(TAG, "Invalid frame format: '%s'", in_buf_);
             break;
           }
 
-          // Update all matching sensors
-          auto range = sensors_.equal_range(obis);
-          for (auto it = range.first; it != range.second; ++it) {
-            set_sensor_value_(it, val1.c_str(), val2.c_str());
+          for (const auto &tuple : parsed_values) {
+            std::string obis = std::get<0>(tuple);
+            std::string val1 = std::get<1>(tuple);
+            std::string val2 = std::get<2>(tuple);
+            // Update all matching sensors
+            auto range = sensors_.equal_range(obis);
+            for (auto it = range.first; it != range.second; ++it) {
+              set_sensor_value_(it, val1.c_str(), val2.c_str());
+            }
           }
         }
       }
@@ -702,6 +707,58 @@ bool IEC62056Component::parse_line_(const char *line, std::string &out_obis, std
   }
 
   return validate_obis_(out_obis);
+}
+
+bool IEC62056Component::parse_line2_(const char *line, std::vector<std::tuple<std::string, std::string, std::string>> &parsed_values) {
+  size_t pos = 0;
+    size_t line_length = std::strlen(line);
+    while (pos < line_length) {
+        // Find the start of the alphanumeric part
+        size_t start = pos;
+        while (start < line_length && line[start] == ' ') {
+            ++start;
+        }
+
+        // Find the end of the alphanumeric part
+        size_t end = start;
+        while (end < line_length && line[end] != '(') {
+            ++end;
+        }
+
+        if (end == line_length) {
+            break;
+        }
+
+        std::string obis(line + start, end - start);
+
+        // Find the first set of parentheses
+        size_t first_open = end;
+        size_t first_close = std::strchr(line + first_open, ')') - line;
+        if (first_close == std::string::npos) {
+            break;
+        }
+
+        std::string value1(line + first_open + 1, first_close - first_open - 1);
+
+        // Check if the next character is an opening parenthesis
+        size_t second_open = first_close + 1;
+        std::string value2 = "";
+        if (second_open < line_length && line[second_open] == '(') {
+            size_t second_close = std::strchr(line + second_open, ')') - line;
+            if (second_close != std::string::npos) {
+                value2 = std::string(line + second_open + 1, second_close - second_open - 1);
+                pos = second_close + 1;
+            } else {
+                pos = first_close + 1;
+            }
+        } else {
+            pos = first_close + 1;
+        }
+
+        parsed_values.emplace_back(obis, value1, value2);
+    }
+
+    return !parsed_values.empty();
 }
 
 void IEC62056Component::clear_uart_input_buffer_() {

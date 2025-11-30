@@ -365,6 +365,8 @@ void IEC62056Component::loop() {
 
       if (battery_meter_) {
         set_next_state_(BATTERY_WAKEUP);
+      } else if (uh50_wakeup_) {
+        set_next_state_(UH50_WAKEUP);
       } else {
         set_next_state_(SEND_REQUEST);
       }
@@ -386,6 +388,32 @@ void IEC62056Component::loop() {
 
       this->send_battery_wakeup_sequence_();
       wait_(1600 + 2240, SEND_REQUEST);  // wait for ~1.6s + 2.24s for all NULLs transmitted
+      break;
+
+    case UH50_WAKEUP:
+      // Special sequence for UH50
+      // 1. send 40 NULL chars
+      // 2. send /#!\r\n
+      report_state_();
+
+      ESP_LOGD(TAG, "UH50 wakeup sequence");
+
+      // 40 NULLs + /#!\r\n
+      {
+        const size_t n_nulls = 40;
+        const uint8_t cmd[] = {'/', '#', '!', '\r', '\n'};
+        const size_t total_size = n_nulls + sizeof(cmd);
+        static_assert(total_size <= MAX_OUT_BUF_SIZE, "Out buffer too small");
+
+        memset(out_buf_, 0, n_nulls);
+        memcpy(out_buf_ + n_nulls, cmd, sizeof(cmd));
+        data_out_size_ = total_size;
+        send_frame_();
+
+        // Wait for transmission to complete (approx 1.5s at 300 baud)
+        // Then go to GET_IDENTIFICATION
+        wait_(1500, GET_IDENTIFICATION);
+      }
       break;
 
     case SEND_REQUEST:
@@ -742,6 +770,9 @@ const char *IEC62056Component::state2txt_(CommState state) {
   switch (state) {
     case BATTERY_WAKEUP:
       return "BATTERY_WAKEUP";
+
+    case UH50_WAKEUP:
+      return "UH50_WAKEUP";
 
     case BEGIN:
       return "BEGIN";

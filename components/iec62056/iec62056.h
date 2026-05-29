@@ -74,6 +74,7 @@ class IEC62056Component : public Component, public uart::UARTDevice {
 
  protected:
   bool parse_line_(const char *line, std::string &out_obis, std::string &out_value1, std::string &out_value2);
+  void parse_and_update_line_(const char *line);
   /// Reset values for all sensors.
   void reset_all_sensors_();
   /// Sets sensor value. Detects sensor type. It does not publish the value.

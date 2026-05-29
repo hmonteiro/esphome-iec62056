@@ -339,20 +339,7 @@ void IEC62056Component::loop() {
             break;
           }
 
-          std::string obis;
-          std::string val1;
-          std::string val2;
-
-          if (!parse_line_((const char *) in_buf_, obis, val1, val2)) {
-            ESP_LOGE(TAG, "Invalid frame format: '%s'", in_buf_);
-            break;
-          }
-
-          // Update all matching sensors
-          auto range = sensors_.equal_range(obis);
-          for (auto it = range.first; it != range.second; ++it) {
-            set_sensor_value_(it, val1.c_str(), val2.c_str());
-          }
+          parse_and_update_line_((const char *) in_buf_);
         }
       }
       break;
@@ -553,25 +540,12 @@ void IEC62056Component::loop() {
 
           in_buf_[frame_size - 2] = 0;
           ESP_LOGD(TAG, "Data: %s", in_buf_);
-          std::string obis;
-          std::string val1;
-          std::string val2;
-
           if ('!' == in_buf_[0]) {
             ESP_LOGV(TAG, "Detected end of readout record");
             break;
           }
 
-          if (!parse_line_((const char *) in_buf_, obis, val1, val2)) {
-            ESP_LOGE(TAG, "Invalid frame format: '%s'", in_buf_);
-            break;
-          }
-
-          // Update all matching sensors
-          auto range = sensors_.equal_range(obis);
-          for (auto it = range.first; it != range.second; ++it) {
-            set_sensor_value_(it, val1.c_str(), val2.c_str());
-          }
+          parse_and_update_line_((const char *) in_buf_);
         }
       }
       break;
@@ -643,9 +617,12 @@ bool IEC62056Component::set_sensor_value_(SENSOR_MAP::iterator &i, const char *v
     ESP_LOGD(TAG, "Set text sensor '%s' for OBIS '%s' group %d. Value: '%s'", txt->get_name().c_str(),
              txt->get_obis().c_str(), txt->get_group(), value);
   } else {  // SENSOR
+    IEC62056Sensor *sen = static_cast<IEC62056Sensor *>(sensor);
+    if (sen->get_index() == 1) {
+      value = value2;
+    }
     // convert to float
     if (validate_float_(value)) {
-      IEC62056Sensor *sen = static_cast<IEC62056Sensor *>(sensor);
       // convert comma (if any) to dot
       char *p = strchr(value, ',');
       if (p) {
@@ -653,7 +630,7 @@ bool IEC62056Component::set_sensor_value_(SENSOR_MAP::iterator &i, const char *v
       }
       float f = strtof(value, nullptr);
       sen->set_value(f);
-      ESP_LOGD(TAG, "Set sensor '%s' for OBIS '%s'. Value: %f", sen->get_name().c_str(), sen->get_obis().c_str(), f);
+      ESP_LOGD(TAG, "Set sensor '%s' for OBIS '%s' index %d. Value: %f", sen->get_name().c_str(), sen->get_obis().c_str(), sen->get_index(), f);
     } else {
       ESP_LOGE(TAG, "Cannot convert data to number. Consider using text sensor. Invalid data: '%s'", value);
       return false;
@@ -733,6 +710,49 @@ bool IEC62056Component::parse_line_(const char *line, std::string &out_obis, std
   }
 
   return validate_obis_(out_obis);
+}
+
+void IEC62056Component::parse_and_update_line_(const char *line) {
+  const char *p = line;
+  while (*p) {
+    const char *obis_start = p;
+    while (*p && *p != '(') {
+      p++;
+    }
+    if (*p != '(') break;
+
+    std::string obis(obis_start, p - obis_start);
+    if (!validate_obis_(obis)) {
+      p = obis_start + 1;
+      continue;
+    }
+
+    p++; // skip '('
+
+    const char *val_start = p;
+    while (*p && *p != ')') {
+      p++;
+    }
+    if (*p != ')') break;
+
+    std::string val(val_start, p - val_start);
+    p++; // skip ')'
+
+    std::string val1 = val;
+    std::string val2 = "";
+    size_t amp_pos = val.find('&');
+    if (amp_pos != std::string::npos) {
+      val1 = val.substr(0, amp_pos);
+      val2 = val.substr(amp_pos + 1);
+    }
+
+    ESP_LOGV(TAG, "Parsed OBIS: '%s' val1: '%s' val2: '%s'", obis.c_str(), val1.c_str(), val2.c_str());
+
+    auto range = sensors_.equal_range(obis);
+    for (auto it = range.first; it != range.second; ++it) {
+      set_sensor_value_(it, val1.c_str(), val2.c_str());
+    }
+  }
 }
 
 void IEC62056Component::clear_uart_input_buffer_() {

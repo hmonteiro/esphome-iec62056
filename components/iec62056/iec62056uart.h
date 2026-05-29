@@ -1,5 +1,13 @@
 #pragma once
 
+#include "esphome/core/version.h"
+
+#ifdef USE_ESP32_FRAMEWORK_ARDUINO
+#if ESPHOME_VERSION_CODE >= VERSION_CODE(2026, 1, 0)
+#error "You are using Arduino framework which is not supported with ESPHome >= 2026.1.0. Please use ESP-IDF framework. Set `framework: type: esp-idf` in your esphome yaml config."
+#endif
+#endif
+
 #ifdef USE_ESP_IDF
 #include "esphome/components/uart/uart_component_esp_idf.h"
 #include "esphome/core/log.h"
@@ -131,17 +139,19 @@ class IEC62056UART final : public uart::ESP8266UartComponent {
 #ifdef USE_ESP_IDF
 class IEC62056UART final : public uart::IDFUARTComponent {
  public:
-  IEC62056UART(uart::IDFUARTComponent &uart)
-      : uart_(uart), iuart_num_(uart.*(&IEC62056UART::uart_num_)), ilock_(uart.*(&IEC62056UART::lock_)) {}
+  IEC62056UART(uart::IDFUARTComponent &uart) : uart_(uart) {}
 
   // Reconfigure baudrate
   void update_baudrate(uint32_t baudrate) {
-    xSemaphoreTake(ilock_, portMAX_DELAY);
-    uart_set_baudrate(iuart_num_, baudrate);
-    xSemaphoreGive(ilock_);
+    this->uart_.set_baud_rate(baudrate);
+    this->uart_.load_settings(false);
   }
 
-  bool read_one_byte(uint8_t *data) { return read_array_quick_(data, 1); }
+  bool read_one_byte(uint8_t *data) {
+    if (!this->check_read_timeout_quick_(1))
+      return false;
+    return this->uart_.read_array(data, 1);
+  }
 
  protected:
   bool check_read_timeout_quick_(size_t len) {
@@ -158,27 +168,7 @@ class IEC62056UART final : public uart::IDFUARTComponent {
     return true;
   }
 
-  bool read_array_quick_(uint8_t *data, size_t len) {
-    size_t length_to_read = len;
-    if (!this->check_read_timeout_quick_(len))
-      return false;
-    xSemaphoreTake(this->ilock_, portMAX_DELAY);
-    if (this->has_peek_) {
-      length_to_read--;
-      *data = this->peek_byte_;
-      data++;
-      this->has_peek_ = false;
-    }
-    if (length_to_read > 0)
-      uart_read_bytes(this->iuart_num_, data, length_to_read, 20 / portTICK_PERIOD_MS);
-    xSemaphoreGive(this->ilock_);
-
-    return true;
-  }
-
   uart::IDFUARTComponent &uart_;
-  uart_port_t iuart_num_;
-  SemaphoreHandle_t &ilock_;
 };
 #endif
 

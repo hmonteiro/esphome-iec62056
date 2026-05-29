@@ -363,10 +363,8 @@ void IEC62056Component::loop() {
       update_connection_start_timestamp_();
       connection_status_(true);
 
-      if (battery_meter_) {
+      if (battery_meter_ || uh50_wakeup_) {
         set_next_state_(BATTERY_WAKEUP);
-      } else if (uh50_wakeup_) {
-        set_next_state_(UH50_WAKEUP);
       } else {
         set_next_state_(SEND_REQUEST);
       }
@@ -376,30 +374,15 @@ void IEC62056Component::loop() {
       break;
 
     case BATTERY_WAKEUP:
-      // Special sequence to wake up ("normal" is used here)
-      // 1. send NULL chars for 2.1-2.3s
-      // 2. wait 1.5-1.7
-      // 3. send standard identification message
-
-      // if we send 84 NULLs at 300 baud it will take ~2.24s
       report_state_();
 
-      ESP_LOGD(TAG, "Battery meter wakeup sequence");
+      if (uh50_wakeup_) {
+        // Special sequence for UH50
+        // 1. send 40 NULL chars
+        // 2. send /#!\r\n
+        ESP_LOGD(TAG, "UH50 wakeup sequence");
 
-      this->send_battery_wakeup_sequence_();
-      wait_(1600 + 2240, SEND_REQUEST);  // wait for ~1.6s + 2.24s for all NULLs transmitted
-      break;
-
-    case UH50_WAKEUP:
-      // Special sequence for UH50
-      // 1. send 40 NULL chars
-      // 2. send /#!\r\n
-      report_state_();
-
-      ESP_LOGD(TAG, "UH50 wakeup sequence");
-
-      // 40 NULLs + /#!\r\n
-      {
+        // 40 NULLs + /#!\r\n
         const size_t n_nulls = 40;
         const uint8_t cmd[] = {'/', '#', '!', '\r', '\n'};
         const size_t total_size = n_nulls + sizeof(cmd);
@@ -413,6 +396,17 @@ void IEC62056Component::loop() {
         // Wait for transmission to complete (approx 1.5s at 300 baud)
         // Then go to GET_IDENTIFICATION
         wait_(1500, GET_IDENTIFICATION);
+      } else {
+        // Special sequence to wake up ("normal" is used here)
+        // 1. send NULL chars for 2.1-2.3s
+        // 2. wait 1.5-1.7
+        // 3. send standard identification message
+
+        // if we send 84 NULLs at 300 baud it will take ~2.24s
+        ESP_LOGD(TAG, "Battery meter wakeup sequence");
+
+        this->send_battery_wakeup_sequence_();
+        wait_(1600 + 2240, SEND_REQUEST);  // wait for ~1.6s + 2.24s for all NULLs transmitted
       }
       break;
 
@@ -770,9 +764,6 @@ const char *IEC62056Component::state2txt_(CommState state) {
   switch (state) {
     case BATTERY_WAKEUP:
       return "BATTERY_WAKEUP";
-
-    case UH50_WAKEUP:
-      return "UH50_WAKEUP";
 
     case BEGIN:
       return "BEGIN";

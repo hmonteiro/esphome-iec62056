@@ -24,6 +24,7 @@ CONF_MODE_D = "mode_d"  # protocol mode D
 CONF_BAUD_RATE_MAX = "baud_rate_max"
 CONF_ON_TIMEOUT = "on_timeout"
 CONF_ON_WAIT_NEXT_READOUT = "on_wait_next_readout"
+CONF_UH50_WAKEUP = "uh50_wakeup"
 
 iec62056_ns = cg.esphome_ns.namespace("iec62056")
 IEC62056Component = iec62056_ns.class_(
@@ -78,6 +79,7 @@ CONFIG_SCHEMA = cv.All(
                 CONF_RETRY_DELAY, default="15s"
             ): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_MODE_D, default=False): cv.boolean,
+            cv.Optional(CONF_UH50_WAKEUP, default=False): cv.boolean,
             cv.Optional(CONF_ON_TIMEOUT): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
@@ -124,6 +126,9 @@ async def to_code(config):
 
     if CONF_MODE_D in config:
         cg.add(var.set_mode_d(config[CONF_MODE_D]))
+
+    if CONF_UH50_WAKEUP in config:
+        cg.add(var.set_uh50_wakeup(config[CONF_UH50_WAKEUP]))
 
     for conf in config.get(CONF_ON_TIMEOUT, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)

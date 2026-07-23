@@ -35,8 +35,12 @@ class IEC62056Sensor : public IEC62056SensorBase, public sensor::Sensor {
     has_value_ = true;
   }
 
+  void set_index(int index) { index_ = index % 2; }
+  uint8_t get_index() { return index_; }
+
  protected:
   float value_;
+  uint8_t index_{0};
 };
 
 class IEC62056TextSensor : public IEC62056SensorBase, public text_sensor::TextSensor {

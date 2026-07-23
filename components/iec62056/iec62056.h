@@ -63,6 +63,7 @@ class IEC62056Component : public Component, public uart::UARTDevice {
   /// @brief Called when switch state changed. Begins readout.
   void trigger_readout();
   void set_mode_d(bool flag) { force_mode_d_ = flag; }
+  void set_uh50_wakeup(bool flag) { uh50_wakeup_ = flag; }
 
   void add_on_timeout_callback(std::function<void()> callback) {
     this->on_timeout_callback_.add(std::move(callback));
@@ -73,6 +74,7 @@ class IEC62056Component : public Component, public uart::UARTDevice {
 
  protected:
   bool parse_line_(const char *line, std::string &out_obis, std::string &out_value1, std::string &out_value2);
+  void parse_and_update_line_(const char *line);
   /// Reset values for all sensors.
   void reset_all_sensors_();
   /// Sets sensor value. Detects sensor type. It does not publish the value.
@@ -217,6 +219,8 @@ class IEC62056Component : public Component, public uart::UARTDevice {
   std::unique_ptr<IEC62056UART> iuart_;
   /// @brief Indicates unidirectional communication, mode D
   bool force_mode_d_;
+  /// @brief Indicates UH50 meter with specific wakeup sequence
+  bool uh50_wakeup_;
   /// @brief on_timeout callback
   CallbackManager<void()> on_timeout_callback_;
   /// @brief on_wait_next_readout callback

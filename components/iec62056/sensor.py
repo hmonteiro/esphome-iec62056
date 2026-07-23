@@ -12,6 +12,7 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(CONF_IEC62056_ID): cv.use_id(IEC62056Component),
             cv.Required(CONF_OBIS): validate_obis,
+            cv.Optional("index", default=0): cv.int_range(min=0, max=1),
         }
     ),
     cv.has_exactly_one_key(CONF_OBIS),
@@ -24,5 +25,8 @@ async def to_code(config):
 
     if CONF_OBIS in config:
         cg.add(var.set_obis(config[CONF_OBIS]))
+
+    if "index" in config:
+        cg.add(var.set_index(config["index"]))
 
     cg.add(component.register_sensor(var))

@@ -78,8 +78,12 @@ void IEC62056Component::dump_config() {
 }
 
 void IEC62056Component::send_frame_() {
+  // Drop any stale or echoed bytes before and after a transmit so they are
+  // not mistaken for a real response from the meter.
+  clear_uart_input_buffer_();
   this->write_array(out_buf_, data_out_size_);
   ESP_LOGVV(TAG, "TX: %s", format_hex_pretty(out_buf_, data_out_size_).c_str());
+  clear_uart_input_buffer_();
 }
 
 size_t IEC62056Component::receive_frame_() {

@@ -78,12 +78,12 @@ void IEC62056Component::dump_config() {
 }
 
 void IEC62056Component::send_frame_() {
-  // Drop any stale bytes before a transmit so they are not mistaken for a
-  // real response from the meter. Avoid clearing the buffer immediately after
-  // the write because some meters reply right away and we would lose that.
+  // Drop any stale or echoed bytes before and after a transmit so they are
+  // not mistaken for a real response from the meter.
   clear_uart_input_buffer_();
   this->write_array(out_buf_, data_out_size_);
   ESP_LOGVV(TAG, "TX: %s", format_hex_pretty(out_buf_, data_out_size_).c_str());
+  clear_uart_input_buffer_();
 }
 
 size_t IEC62056Component::receive_frame_() {
@@ -504,10 +504,8 @@ void IEC62056Component::loop() {
           ESP_LOGD(TAG, "Meter started readout transmission");
           set_next_state_(READOUT);
         } else {
-          ESP_LOGV(TAG, "Ignoring frame while waiting for STX. Got 0x%02x", in_buf_[0]);
-          // Some meters may emit a short leading frame or an echo before the
-          // actual readout starts. Keep waiting for the real STX instead of
-          // aborting the whole connection.
+          ESP_LOGD(TAG, "No STX. Got 0x%02x", in_buf_[0]);
+          retry_or_sleep_();
         }
       }
       break;
